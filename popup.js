@@ -25,8 +25,6 @@ class PopupController {
       actionCount: document.getElementById('actionCount'),
       recordingsList: document.getElementById('recordingsList'),
       refreshBtn: document.getElementById('refreshBtn'),
-      settingsBtn: document.getElementById('settingsBtn'),
-      helpBtn: document.getElementById('helpBtn'),
       // Modal elements
       namingModal: document.getElementById('namingModal'),
       namingForm: document.getElementById('namingForm'),
@@ -42,8 +40,6 @@ class PopupController {
     this.elements.pauseBtn.addEventListener('click', () => this.pauseRecording());
     this.elements.resumeBtn.addEventListener('click', () => this.resumeRecording());
     this.elements.refreshBtn.addEventListener('click', () => this.loadRecordings());
-    this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
-    this.elements.helpBtn.addEventListener('click', () => this.openHelp());
     
     
     // Modal listeners
@@ -268,7 +264,7 @@ class PopupController {
 
   updateUIForStopped() {
     this.elements.statusIndicator.className = 'status-indicator';
-    this.elements.statusText.textContent = 'Ready';
+    this.elements.statusText.textContent = '';
     this.elements.startBtn.style.display = 'flex';
     this.elements.pauseBtn.style.display = 'none';
     this.elements.resumeBtn.style.display = 'none';
@@ -362,13 +358,16 @@ class PopupController {
   }
 
   async viewVideo(recordingId) {
+    console.log('Attempting to view video for recording:', recordingId);
     chrome.runtime.sendMessage({
       action: 'openVideo',
       recordingId
     }, (response) => {
+      console.log('View video response:', response);
       if (response && response.success) {
-        this.showSuccess('Opening video file...');
+        this.showSuccess('Opening Downloads folder...');
       } else {
+        console.error('View video failed:', response);
         this.showError(response?.error || 'Video not found for this recording');
       }
     });
@@ -438,14 +437,6 @@ class PopupController {
         this.showError('Failed to delete recording');
       }
     });
-  }
-
-  openSettings() {
-    chrome.runtime.openOptionsPage();
-  }
-
-  openHelp() {
-    chrome.tabs.create({ url: 'https://github.com/yourusername/demo-recorder/wiki' });
   }
 
 

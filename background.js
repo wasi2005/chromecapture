@@ -6,6 +6,7 @@ class RecordingSession {
     this.startTime = Date.now();
     this.actions = [];
     this.videoDownloadId = null;
+    this.videoFilename = null;
     this.screenRecordingTabId = null;
     this.metadata = {
       title: '',
@@ -32,6 +33,7 @@ class RecordingSession {
       duration: Date.now() - this.startTime,
       actions: this.actions,
       videoDownloadId: this.videoDownloadId,
+      videoFilename: this.videoFilename,
       metadata: this.metadata
     };
   }
@@ -290,8 +292,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const activeSession = recordingManager.getSession(request.tabId);
       
       if (activeSession && request.recordingId === activeSession.id) {
-        // Store the download ID
+        // Store the download ID and filename
         activeSession.videoDownloadId = request.downloadId;
+        activeSession.videoFilename = request.videoFilename;
         
         // Stop the demo recording
         recordingManager.stopCombinedRecording(request.tabId)
@@ -315,20 +318,80 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
 
     case 'openVideo':
+      console.log('openVideo action received for recordingId:', request.recordingId);
       getSavedRecordings().then(recordings => {
+        console.log('Found recordings:', recordings.length);
         const recording = recordings.find(r => r.id === request.recordingId);
-        if (recording && recording.videoDownloadId) {
-          // Use chrome.downloads.open to open the downloaded file
-          chrome.downloads.open(recording.videoDownloadId, () => {
-            if (chrome.runtime.lastError) {
-              sendResponse({ success: false, error: 'Could not open video file: ' + chrome.runtime.lastError.message });
+        console.log('Found recording:', recording ? 'yes' : 'no');
+        console.log('Recording data:', recording);
+        
+        if (recording && (recording.videoDownloadId || recording.videoFilename)) {
+          // Try multiple approaches to open the video
+          
+          // Approach 1: Try chrome.downloads.show with download ID
+          if (recording.videoDownloadId) {
+            console.log('Trying chrome.downloads.show with ID:', recording.videoDownloadId);
+            chrome.downloads.show(recording.videoDownloadId, () => {
+              if (chrome.runtime.lastError) {
+                console.log('downloads.show failed:', chrome.runtime.lastError.message);
+                trySearchAndShow();
+              } else {
+                console.log('downloads.show succeeded');
+                sendResponse({ success: true });
+              }
+            });
+          } else {
+            trySearchAndShow();
+          }
+          
+          function trySearchAndShow() {
+            // Approach 2: Search for the file and show it
+            if (recording.videoFilename) {
+              console.log('Searching for video file:', recording.videoFilename);
+              chrome.downloads.search({ 
+                query: recording.videoFilename.replace(/\.[^/.]+$/, ""), // Remove extension for search
+                state: 'complete'
+              }, (items) => {
+                console.log('Search results:', items);
+                if (items && items.length > 0) {
+                  chrome.downloads.show(items[0].id, () => {
+                    if (chrome.runtime.lastError) {
+                      console.log('Second downloads.show failed:', chrome.runtime.lastError.message);
+                      openDownloadsPage();
+                    } else {
+                      console.log('Second downloads.show succeeded');
+                      sendResponse({ success: true });
+                    }
+                  });
+                } else {
+                  console.log('No files found in search');
+                  openDownloadsPage();
+                }
+              });
             } else {
-              sendResponse({ success: true });
+              openDownloadsPage();
             }
-          });
+          }
+          
+          function openDownloadsPage() {
+            // Approach 3: Just open the downloads page
+            console.log('Opening downloads page as fallback');
+            chrome.tabs.create({ url: 'chrome://downloads/' }, () => {
+              if (chrome.runtime.lastError) {
+                sendResponse({ success: false, error: 'Could not open downloads page: ' + chrome.runtime.lastError.message });
+              } else {
+                sendResponse({ success: true });
+              }
+            });
+          }
+          
         } else {
-          sendResponse({ success: false, error: 'Video not found' });
+          console.log('No video data found for recording');
+          sendResponse({ success: false, error: 'Video not found for this recording' });
         }
+      }).catch(error => {
+        console.error('Error getting recordings:', error);
+        sendResponse({ success: false, error: 'Failed to load recordings' });
       });
       return true;
 

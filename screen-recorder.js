@@ -103,12 +103,13 @@ function startRecording() {
             }
             
             if (downloadId && recordingId && tabId) {
-              // Store the download ID and stop the demo recording
+              // Store the download ID, filename and stop the demo recording
               chrome.runtime.sendMessage({
                 action: 'screenRecordingStopped',
                 recordingId: recordingId,
                 tabId: parseInt(tabId),
-                downloadId: downloadId
+                downloadId: downloadId,
+                videoFilename: filename
               });
             }
             
