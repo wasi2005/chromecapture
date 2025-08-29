@@ -28,6 +28,7 @@ class PopupController {
       refreshBtn: document.getElementById('refreshBtn'),
       settingsBtn: document.getElementById('settingsBtn'),
       helpBtn: document.getElementById('helpBtn'),
+      screenRecordBtn: document.getElementById('screenRecordBtn'),
       // Modal elements
       namingModal: document.getElementById('namingModal'),
       namingForm: document.getElementById('namingForm'),
@@ -46,6 +47,7 @@ class PopupController {
     this.elements.refreshBtn.addEventListener('click', () => this.loadRecordings());
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.helpBtn.addEventListener('click', () => this.openHelp());
+    this.elements.screenRecordBtn.addEventListener('click', () => this.startScreenRecording());
     
     
     // Modal listeners
@@ -386,6 +388,29 @@ class PopupController {
 
   openHelp() {
     chrome.tabs.create({ url: 'https://github.com/yourusername/demo-recorder/wiki' });
+  }
+
+  async startScreenRecording() {
+    if (!this.currentTab) return;
+
+    this.elements.screenRecordBtn.disabled = true;
+    this.elements.screenRecordBtn.textContent = 'Opening...';
+    
+    chrome.runtime.sendMessage({
+      action: 'startScreenRecording',
+      tabId: this.currentTab.id,
+      format: 'webm'
+    }, (response) => {
+      if (response.success) {
+        this.showSuccess('Screen recording started in new tab');
+        // Close the popup
+        window.close();
+      } else {
+        this.showError('Failed to start screen recording');
+        this.elements.screenRecordBtn.disabled = false;
+        this.elements.screenRecordBtn.textContent = 'Start Screen Recording';
+      }
+    });
   }
 
   showSuccess(message) {

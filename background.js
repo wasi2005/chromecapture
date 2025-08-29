@@ -228,6 +228,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
     
+    case 'startScreenRecording':
+      // Open screen recording page
+      chrome.tabs.create({
+        url: chrome.runtime.getURL(`screen-recorder.html?tabId=${request.tabId}&format=${request.format || 'webm'}&autostart=true`)
+      }, (tab) => {
+        sendResponse({ success: true, tabId: tab.id });
+      });
+      return true;
+    
     case 'captureScreenshot':
       if (sender.tab) {
         chrome.tabs.captureVisibleTab(sender.tab.windowId, 

@@ -10,7 +10,8 @@
     "scripting",
     "tabs",
     "webNavigation",
-    "downloads"
+    "downloads",
+    "desktopCapture"
   ],
   
   "host_permissions": [
@@ -37,7 +38,7 @@
   
   "web_accessible_resources": [
     {
-      "resources": ["overlay.css"],
+      "resources": ["overlay.css", "screen-recorder.html", "screen-recorder.js"],
       "matches": ["<all_urls>"]
     }
   ]
