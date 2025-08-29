@@ -107,7 +107,7 @@ class ActionRecorder {
     this.isRecording = true;
     this.sessionId = sessionId;
     this.attachListeners();
-    this.injectOverlay();
+    // this.injectOverlay(); // Disabled overlay
   }
 
   stop() {
@@ -116,7 +116,7 @@ class ActionRecorder {
     this.isRecording = false;
     this.sessionId = null;
     this.detachListeners();
-    this.removeOverlay();
+    // this.removeOverlay(); // Disabled overlay
     this.inputBuffer.clear();
   }
 
@@ -180,7 +180,7 @@ class ActionRecorder {
     };
 
     this.recordAction(action);
-    this.flashElement(element);
+    // this.flashElement(element); // Disabled flash effect
   }
 
   handleDoubleClick(event) {
