@@ -5,6 +5,8 @@ class RecordingSession {
     this.url = url;
     this.startTime = Date.now();
     this.actions = [];
+    this.videoDownloadId = null;
+    this.screenRecordingTabId = null;
     this.metadata = {
       title: '',
       viewport: null,
@@ -29,6 +31,7 @@ class RecordingSession {
       endTime: Date.now(),
       duration: Date.now() - this.startTime,
       actions: this.actions,
+      videoDownloadId: this.videoDownloadId,
       metadata: this.metadata
     };
   }
@@ -98,8 +101,10 @@ class RecordingManager {
 
     console.log('Stopping recording for tab:', tabId, 'Session:', session.id);
     
+    // Stop action recording
     chrome.tabs.sendMessage(tabId, { action: 'stopRecording' });
     chrome.action.setBadgeText({ text: '', tabId });
+    
     
     const exportData = session.export();
     
@@ -147,6 +152,38 @@ class RecordingManager {
   isRecording(tabId) {
     return this.sessions.has(tabId);
   }
+
+  async startCombinedRecording(tabId) {
+    try {
+      // Start the demo recording
+      const session = await this.startRecording(tabId);
+      
+      // Start screen recording in a new tab
+      chrome.tabs.create({
+        url: chrome.runtime.getURL(`screen-recorder.html?tabId=${tabId}&format=webm&autostart=true&recordingId=${session.id}`)
+      }, (screenTab) => {
+        if (screenTab) {
+          session.screenRecordingTabId = screenTab.id;
+        }
+      });
+      
+      return session;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async stopCombinedRecording(tabId) {
+    const session = this.sessions.get(tabId);
+    if (!session) return null;
+
+    // Stop the demo recording
+    const exportData = await this.stopRecording(tabId);
+    
+    // No need to close screen recording tab - it closes itself
+
+    return exportData;
+  }
 }
 
 const recordingManager = new RecordingManager();
@@ -155,11 +192,30 @@ const recordingManager = new RecordingManager();
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   switch (request.action) {
+    case 'startCombinedRecording':
+      recordingManager.startCombinedRecording(request.tabId)
+        .then(session => sendResponse({ success: true, sessionId: session.id }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+
+    case 'stopCombinedRecording':
+      recordingManager.stopCombinedRecording(request.tabId)
+        .then(recording => {
+          if (recording) {
+            sendResponse({ success: true, recording });
+          } else {
+            sendResponse({ success: false, error: 'No active recording' });
+          }
+        })
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+
     case 'startRecording':
       recordingManager.startRecording(request.tabId)
         .then(session => sendResponse({ success: true, sessionId: session.id }))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
+    
 
     case 'stopRecording':
       recordingManager.stopRecording(request.tabId)
@@ -228,6 +284,54 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true;
     
+
+    case 'screenRecordingStopped':
+      // Handle when screen recording stops - this should stop the demo recording too
+      const activeSession = recordingManager.getSession(request.tabId);
+      
+      if (activeSession && request.recordingId === activeSession.id) {
+        // Store the download ID
+        activeSession.videoDownloadId = request.downloadId;
+        
+        // Stop the demo recording
+        recordingManager.stopCombinedRecording(request.tabId)
+          .then(recording => {
+            if (recording) {
+              // Store the completed recording for the popup to pick up
+              chrome.storage.local.set({
+                [`pendingRecording_${request.tabId}`]: recording
+              });
+              
+              // Send response
+              sendResponse({ success: true, recording: recording });
+            } else {
+              sendResponse({ success: false, error: 'Failed to stop recording' });
+            }
+          })
+          .catch(error => sendResponse({ success: false, error: error.message }));
+      } else {
+        sendResponse({ success: false, error: 'Recording session not found' });
+      }
+      return true;
+
+    case 'openVideo':
+      getSavedRecordings().then(recordings => {
+        const recording = recordings.find(r => r.id === request.recordingId);
+        if (recording && recording.videoDownloadId) {
+          // Use chrome.downloads.open to open the downloaded file
+          chrome.downloads.open(recording.videoDownloadId, () => {
+            if (chrome.runtime.lastError) {
+              sendResponse({ success: false, error: 'Could not open video file: ' + chrome.runtime.lastError.message });
+            } else {
+              sendResponse({ success: true });
+            }
+          });
+        } else {
+          sendResponse({ success: false, error: 'Video not found' });
+        }
+      });
+      return true;
+
     case 'startScreenRecording':
       // Open screen recording page
       chrome.tabs.create({

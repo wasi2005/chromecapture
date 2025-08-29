@@ -161,20 +161,6 @@ body {
   margin-bottom: 16px;
 }
 
-.screen-recording-section {
-  margin-bottom: 16px;
-}
-
-.screen-recording-section .btn {
-  width: 100%;
-  background: #6366f1;
-  color: white;
-}
-
-.screen-recording-section .btn:hover {
-  background: #5855eb;
-}
-
 .btn {
   flex: 1;
   display: flex;
@@ -240,6 +226,7 @@ body {
   background: #f8f9fa;
   border-radius: 4px;
 }
+
 
 
 .recording-info {

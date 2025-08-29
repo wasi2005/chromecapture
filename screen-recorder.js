@@ -59,6 +59,14 @@ function startRecording() {
         stream = mediaStream;
         recordedChunks = [];
         
+        // Listen for when screen sharing ends
+        stream.getVideoTracks()[0].addEventListener('ended', () => {
+          console.log('Screen sharing ended, stopping recording...');
+          if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+          }
+        });
+        
         const mimeType = getMimeType(exportFormat);
         mediaRecorder = new MediaRecorder(stream, {
           mimeType: mimeType,
@@ -79,19 +87,40 @@ function startRecording() {
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const filename = `screen-recording-${timestamp}.${exportFormat}`;
           
+          // Get URL parameters
+          const recordingId = params.get('recordingId');
+          const tabId = params.get('tabId');
+          
           // Download the recording
           chrome.downloads.download({
             url: url,
             filename: filename,
             saveAs: true
-          }, () => {
+          }, (downloadId) => {
+            if (chrome.runtime.lastError) {
+              console.error('Download failed:', chrome.runtime.lastError);
+              return;
+            }
+            
+            if (downloadId && recordingId && tabId) {
+              // Store the download ID and stop the demo recording
+              chrome.runtime.sendMessage({
+                action: 'screenRecordingStopped',
+                recordingId: recordingId,
+                tabId: parseInt(tabId),
+                downloadId: downloadId
+              });
+            }
+            
             status.textContent = 'Recording saved!';
             document.getElementById('message').textContent = 'You can close this tab now.';
             document.getElementById('message').classList.remove('hidden');
             
-            // Clean up
-            URL.revokeObjectURL(url);
+            // Clean up stream
             stream.getTracks().forEach(track => track.stop());
+            
+            // Clean up blob URL
+            URL.revokeObjectURL(url);
             
             // Auto close after 3 seconds
             setTimeout(() => {

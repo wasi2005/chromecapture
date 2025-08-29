@@ -20,7 +20,6 @@ class PopupController {
       startBtn: document.getElementById('startBtn'),
       pauseBtn: document.getElementById('pauseBtn'),
       resumeBtn: document.getElementById('resumeBtn'),
-      stopBtn: document.getElementById('stopBtn'),
       recordingInfo: document.getElementById('recordingInfo'),
       timer: document.getElementById('timer'),
       actionCount: document.getElementById('actionCount'),
@@ -28,7 +27,6 @@ class PopupController {
       refreshBtn: document.getElementById('refreshBtn'),
       settingsBtn: document.getElementById('settingsBtn'),
       helpBtn: document.getElementById('helpBtn'),
-      screenRecordBtn: document.getElementById('screenRecordBtn'),
       // Modal elements
       namingModal: document.getElementById('namingModal'),
       namingForm: document.getElementById('namingForm'),
@@ -43,11 +41,9 @@ class PopupController {
     this.elements.startBtn.addEventListener('click', () => this.startRecording());
     this.elements.pauseBtn.addEventListener('click', () => this.pauseRecording());
     this.elements.resumeBtn.addEventListener('click', () => this.resumeRecording());
-    this.elements.stopBtn.addEventListener('click', () => this.stopRecording());
     this.elements.refreshBtn.addEventListener('click', () => this.loadRecordings());
     this.elements.settingsBtn.addEventListener('click', () => this.openSettings());
     this.elements.helpBtn.addEventListener('click', () => this.openHelp());
-    this.elements.screenRecordBtn.addEventListener('click', () => this.startScreenRecording());
     
     
     // Modal listeners
@@ -68,6 +64,14 @@ class PopupController {
       
       await this.checkRecordingStatus();
       await this.loadRecordings();
+      
+      // Check for pending recordings every few seconds if recording
+      this.pendingCheckInterval = setInterval(async () => {
+        if (this.isRecording) {
+          await this.checkForPendingRecording();
+        }
+      }, 2000);
+      
     } catch (error) {
       console.error('Initialization error:', error);
       this.showError('Failed to initialize');
@@ -76,6 +80,9 @@ class PopupController {
 
   async checkRecordingStatus() {
     if (!this.currentTab) return;
+
+    // First check for any pending recordings that completed while popup was closed
+    await this.checkForPendingRecording();
 
     chrome.runtime.sendMessage({
       action: 'getStatus',
@@ -97,13 +104,33 @@ class PopupController {
     });
   }
 
+  async checkForPendingRecording() {
+    if (!this.currentTab) return;
+
+    try {
+      const result = await chrome.storage.local.get([`pendingRecording_${this.currentTab.id}`]);
+      const pendingRecording = result[`pendingRecording_${this.currentTab.id}`];
+      
+      if (pendingRecording) {
+        // Remove the pending recording from storage
+        await chrome.storage.local.remove([`pendingRecording_${this.currentTab.id}`]);
+        
+        // Handle the completed recording
+        this.handleAutoStop(pendingRecording);
+      }
+    } catch (error) {
+      console.error('Error checking for pending recording:', error);
+    }
+  }
+
   async startRecording() {
     if (!this.currentTab) return;
 
     this.elements.startBtn.disabled = true;
+    this.elements.startBtn.textContent = 'Starting...';
     
     chrome.runtime.sendMessage({
-      action: 'startRecording',
+      action: 'startCombinedRecording',
       tabId: this.currentTab.id
     }, (response) => {
       if (response.success) {
@@ -112,10 +139,12 @@ class PopupController {
         this.actionCount = 0;
         this.updateUIForRecording();
         this.startTimer();
-        
+        this.elements.startBtn.textContent = 'Start Recording';
+        this.showSuccess('Recording started (Demo + Video)');
       } else {
         this.showError('Failed to start recording: ' + (response.error || 'Unknown error'));
         this.elements.startBtn.disabled = false;
+        this.elements.startBtn.textContent = 'Start Recording';
       }
     });
   }
@@ -150,31 +179,40 @@ class PopupController {
     });
   }
 
-  async stopRecording() {
-    if (!this.currentTab || !this.isRecording) return;
-
-    this.elements.stopBtn.disabled = true;
+  async handleAutoStop(recording) {
+    // Called automatically when screen sharing stops
+    this.isRecording = false;
+    this.isPaused = false;
+    this.stopTimer();
+    this.updateUIForStopped();
     
-    chrome.runtime.sendMessage({
-      action: 'stopRecording',
-      tabId: this.currentTab.id
-    }, (response) => {
-      if (response.success) {
-        this.isRecording = false;
-        this.isPaused = false;
-        this.stopTimer();
-        this.updateUIForStopped();
-        
-        if (response.recording) {
-          // Store the recording temporarily and show naming modal
-          this.pendingRecording = response.recording;
-          this.showNamingModal();
+    // Clear the pending check interval
+    if (this.pendingCheckInterval) {
+      clearInterval(this.pendingCheckInterval);
+      this.pendingCheckInterval = null;
+    }
+    
+    if (recording) {
+      // Auto-save the recording with a default name
+      const timestamp = new Date().toLocaleString();
+      recording.metadata = recording.metadata || {};
+      recording.metadata.title = `Demo Recording - ${timestamp}`;
+      recording.metadata.featureDescription = 'Automatically saved demo recording';
+      
+      // Save the recording immediately
+      chrome.runtime.sendMessage({
+        action: 'saveNamedRecording',
+        recording: recording
+      }, (response) => {
+        if (response && response.success) {
+          this.showSuccess('Recording saved successfully!');
+          // Refresh the recordings list
+          setTimeout(() => this.loadRecordings(), 500);
+        } else {
+          this.showError('Failed to save recording');
         }
-      } else {
-        this.showError('Failed to stop recording');
-      }
-      this.elements.stopBtn.disabled = false;
-    });
+      });
+    }
   }
   
   showNamingModal() {
@@ -214,11 +252,10 @@ class PopupController {
 
   updateUIForRecording() {
     this.elements.statusIndicator.className = 'status-indicator recording';
-    this.elements.statusText.textContent = 'Recording Actions';
+    this.elements.statusText.textContent = 'Recording Actions - Stop screen sharing to finish';
     this.elements.startBtn.style.display = 'none';
     this.elements.pauseBtn.style.display = 'flex';
     this.elements.resumeBtn.style.display = 'none';
-    this.elements.stopBtn.style.display = 'flex';  // Show the stop button
     this.elements.recordingInfo.style.display = 'flex';
   }
 
@@ -235,7 +272,6 @@ class PopupController {
     this.elements.startBtn.style.display = 'flex';
     this.elements.pauseBtn.style.display = 'none';
     this.elements.resumeBtn.style.display = 'none';
-    this.elements.stopBtn.style.display = 'none';
     this.elements.recordingInfo.style.display = 'none';
     this.elements.timer.textContent = '00:00';
     this.elements.actionCount.textContent = '0';
@@ -285,6 +321,7 @@ class PopupController {
             </div>
             <div class="recording-actions">
               <button class="export-btn" data-id="${recording.id}" data-format="html">View Demo</button>
+              <button class="view-video-btn" data-id="${recording.id}">View Video</button>
               <button class="delete-btn" data-id="${recording.id}">Delete</button>
             </div>
           </div>
@@ -305,6 +342,14 @@ class PopupController {
       });
     });
 
+    document.querySelectorAll('.view-video-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const recordingId = e.target.dataset.id;
+        this.viewVideo(recordingId);
+      });
+    });
+
     document.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -313,6 +358,19 @@ class PopupController {
           this.deleteRecording(recordingId);
         }
       });
+    });
+  }
+
+  async viewVideo(recordingId) {
+    chrome.runtime.sendMessage({
+      action: 'openVideo',
+      recordingId
+    }, (response) => {
+      if (response && response.success) {
+        this.showSuccess('Opening video file...');
+      } else {
+        this.showError(response?.error || 'Video not found for this recording');
+      }
     });
   }
 
@@ -390,28 +448,6 @@ class PopupController {
     chrome.tabs.create({ url: 'https://github.com/yourusername/demo-recorder/wiki' });
   }
 
-  async startScreenRecording() {
-    if (!this.currentTab) return;
-
-    this.elements.screenRecordBtn.disabled = true;
-    this.elements.screenRecordBtn.textContent = 'Opening...';
-    
-    chrome.runtime.sendMessage({
-      action: 'startScreenRecording',
-      tabId: this.currentTab.id,
-      format: 'webm'
-    }, (response) => {
-      if (response.success) {
-        this.showSuccess('Screen recording started in new tab');
-        // Close the popup
-        window.close();
-      } else {
-        this.showError('Failed to start screen recording');
-        this.elements.screenRecordBtn.disabled = false;
-        this.elements.screenRecordBtn.textContent = 'Start Screen Recording';
-      }
-    });
-  }
 
   showSuccess(message) {
     this.showNotification(message, 'success');
