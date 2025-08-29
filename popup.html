@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="header">
+      <h1>Demo Recorder</h1>
+      <span class="version">v1.0.0</span>
+    </div>
+
+    <div id="controls" class="controls">
+      <div class="status" id="status">
+        <span class="status-indicator" id="statusIndicator"></span>
+        <span class="status-text" id="statusText">Ready</span>
+      </div>
+
+      <div class="main-controls">
+        <button id="startBtn" class="btn btn-primary">
+          Start Recording
+        </button>
+        
+        <button id="pauseBtn" class="btn btn-secondary" style="display: none;">
+          Pause
+        </button>
+        
+        <button id="resumeBtn" class="btn btn-secondary" style="display: none;">
+          Resume
+        </button>
+        
+        <button id="stopBtn" class="btn btn-danger" style="display: none;">
+          Stop Recording
+        </button>
+      </div>
+      
+
+      <div class="recording-info" id="recordingInfo" style="display: none;">
+        <div class="timer">
+          <span class="timer-label">Duration:</span>
+          <span class="timer-value" id="timer">00:00</span>
+        </div>
+        <div class="action-count">
+          <span class="count-label">Actions:</span>
+          <span class="count-value" id="actionCount">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="saved-recordings">
+      <div class="section-header">
+        <h2>Recent Recordings</h2>
+        <button id="refreshBtn" class="btn-text" title="Refresh">
+          ↻
+        </button>
+      </div>
+      
+      <div id="recordingsList" class="recordings-list">
+        <div class="empty-state">
+          <p>No recordings yet</p>
+          <p class="hint">Click "Start Recording" to begin</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <button id="settingsBtn" class="btn-text">Settings</button>
+      <button id="helpBtn" class="btn-text">Help</button>
+    </div>
+  </div>
+
+  <!-- Modal for naming the recording -->
+  <div id="namingModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h2>Name Your Demo</h2>
+      <form id="namingForm">
+        <div class="form-group">
+          <label for="demoName">Demo Name:</label>
+          <input type="text" id="demoName" name="demoName" placeholder="e.g., User Login Flow" required autofocus>
+        </div>
+        <div class="form-group">
+          <label for="featureDescription">What feature did you record?</label>
+          <textarea id="featureDescription" name="featureDescription" 
+                    placeholder="e.g., Demonstrated the complete user login process including email validation and password reset" 
+                    rows="3" required></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save Recording</button>
+          <button type="button" id="cancelNaming" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
